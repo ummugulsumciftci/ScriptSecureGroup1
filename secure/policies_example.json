@@ -1,1 +1,11 @@
-
+{
+  "policies": [
+    {
+      "id": "allow_read_logs",
+      "resource_type": "file",
+      "action": "read",
+      "path_pattern": "/app/logs/*.log",
+      "effect": "allow"
+    }
+  ]
+}
