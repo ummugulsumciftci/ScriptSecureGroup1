@@ -1,0 +1,6 @@
+{
+  "FILE_READ": ["izinli", "/tmp"],
+  "FILE_WRITE": ["izinli", "/tmp"],
+  "OS_EXECUTE": ["echo", "ls"],
+  "NETWORK_CONNECT": ["127.0.0.1", "localhost"]
+}
