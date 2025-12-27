@@ -1,6 +1,219 @@
 {
-  "FILE_READ": ["izinli", "/tmp"],
-  "FILE_WRITE": ["izinli", "/tmp"],
-  "OS_EXECUTE": ["echo", "ls"],
-  "NETWORK_CONNECT": ["127.0.0.1", "localhost"]
+  "version": "1.0",
+  "description": "ScriptSecure Zero Trust Policy - Default Deny Principle",
+  "default_action": "DENY",
+  "enforcement_mode": "strict",
+  
+  "file_system": {
+    "default": "DENY",
+    "allowed_paths": [
+      {
+        "path": "/tmp",
+        "actions": ["read", "write"],
+        "description": "Temp dosya dizini için sadece okuma ve yazma",
+        "restrictions": {
+          "max_file_size_mb": 10,
+          "allowed_extensions": [".tmp", ".log", ".txt"],
+          "forbidden_patterns": ["*.sh", "*.py", "*.js", "*.exe"]
+        }
+      },
+      {
+        "path": "/app/wrappers",
+        "actions": ["read", "execute"],
+        "description": "Wrapper dosyaları için sadece okuma ve çalıştırma",
+        "restrictions": {
+          "read_only": true
+        }
+      }
+    ],
+    "forbidden_paths": [
+      {
+        "path": "/etc",
+        "description": "Sistem yapılandırma dizini - tamamen yasak"
+      },
+      {
+        "path": "/root",
+        "description": "Root kullanıcı dizini - tamamen yasak"
+      },
+      {
+        "path": "/home",
+        "description": "Kullanıcı dizinleri - tamamen yasak"
+      },
+      {
+        "path": "/usr/bin",
+        "description": "Sistem ikili dosyaları - tamamen yasak"
+      },
+      {
+        "path": "/sys",
+        "description": "Sistem bilgileri - tamamen yasak"
+      },
+      {
+        "path": "/proc",
+        "description": "İşlem bilgileri - tamamen yasak"
+      },
+      {
+        "path": "/dev",
+        "description": "Cihaz dosyaları - tamamen yasak (istisnalar aşağıda)"
+      }
+    ],
+    "allowed_devices": [
+      {
+        "device": "/dev/null",
+        "actions": ["read", "write"],
+        "description": "Null cihaz - log yönlendirme için"
+      },
+      {
+        "device": "/dev/stdout",
+        "actions": ["write"],
+        "description": "Standart çıktı"
+      },
+      {
+        "device": "/dev/stderr",
+        "actions": ["write"],
+        "description": "Standart hata çıktısı"
+      }
+    ]
+  },
+  
+  "network": {
+    "default": "DENY",
+    "allowed_endpoints": [],
+    "forbidden_protocols": ["tcp", "udp", "icmp", "raw"],
+    "forbidden_ports": "all",
+    "description": "Ağ erişimi tamamen kapalı - hiçbir bağlantıya izin verilmez"
+  },
+  
+  "process": {
+    "default": "DENY",
+    "allowed_commands": [],
+    "forbidden_commands": [
+      {
+        "pattern": "*",
+        "description": "Tüm sistem komutları yasak"
+      }
+    ],
+    "description": "Sistem command execution tamamen kapalı"
+  },
+  
+  "capabilities": {
+    "default": "DENY",
+    "allowed_capabilities": [],
+    "forbidden_capabilities": [
+      "CAP_SYS_ADMIN",
+      "CAP_SYS_MODULE",
+      "CAP_SYS_RAWIO",
+      "CAP_NET_ADMIN",
+      "CAP_NET_RAW",
+      "CAP_DAC_OVERRIDE",
+      "CAP_SETUID",
+      "CAP_SETGID",
+      "CAP_SYS_PTRACE",
+      "CAP_CHOWN",
+      "CAP_FOWNER",
+      "CAP_MKNOD",
+      "CAP_LINUX_IMMUTABLE",
+      "CAP_SYS_BOOT",
+      "CAP_LEASE",
+      "CAP_AUDIT_WRITE",
+      "CAP_AUDIT_CONTROL",
+      "CAP_MAC_OVERRIDE",
+      "CAP_MAC_ADMIN",
+      "CAP_SYSLOG",
+      "CAP_WAKE_ALARM",
+      "CAP_BLOCK_SUSPEND",
+      "CAP_IPC_LOCK",
+      "CAP_IPC_OWNER",
+      "CAP_SYS_TIME",
+      "CAP_SYS_TTY_CONFIG",
+      "CAP_SYS_RESOURCE",
+      "CAP_KILL",
+      "CAP_SYS_NICE"
+    ],
+    "description": "Tüm Linux capabilities default deny"
+  },
+  
+  "system_calls": {
+    "default": "SCMP_ACT_ERRNO",
+    "allowed_syscalls": [
+      "read",
+      "write",
+      "exit",
+      "exit_group",
+      "brk",
+      "mmap",
+      "munmap",
+      "mprotect",
+      "openat",
+      "close",
+      "fstat",
+      "lseek",
+      "getpid",
+      "getuid",
+      "getgid",
+      "arch_prctl",
+      "set_tid_address",
+      "futex",
+      "rt_sigaction",
+      "rt_sigprocmask",
+      "rt_sigreturn",
+      "sigaltstack",
+      "clone",
+      "execve"
+    ],
+    "forbidden_syscalls": [
+      "socket",
+      "connect",
+      "bind",
+      "listen",
+      "accept",
+      "sendto",
+      "recvfrom",
+      "mount",
+      "umount",
+      "chmod",
+      "chown",
+      "setuid",
+      "setgid",
+      "ptrace",
+      "clone",
+      "fork",
+      "vfork",
+      "unshare",
+      "setns",
+      "open",
+      "creat",
+      "unlink",
+      "rename",
+      "link",
+      "symlink",
+      "mkdir",
+      "rmdir",
+      "mknod"
+    ],
+    "description": "Sadece temel okuma/yazma ve çalıştırma syscall'larına izin verilir"
+  },
+  
+  "resource_limits": {
+    "memory_mb": 64,
+    "cpu_percent": 50,
+    "pids_limit": 15,
+    "file_descriptors": 32,
+    "max_file_size_mb": 10,
+    "description": "Kaynak kullanım limitleri - fork bomb ve DoS saldırılarına karşı"
+  },
+  
+  "logging": {
+    "enabled": true,
+    "log_all_decisions": true,
+    "log_file": "/tmp/access.log",
+    "audit_trail": true,
+    "description": "Tüm yetkilendirme kararları loglanır - denetim izi için"
+  },
+  
+  "script_metadata": {
+    "allowed_languages": ["python", "javascript"],
+    "max_script_size_kb": 100,
+    "max_execution_time_seconds": 30,
+    "description": "Script meta veri kısıtlamaları"
+  }
 }
