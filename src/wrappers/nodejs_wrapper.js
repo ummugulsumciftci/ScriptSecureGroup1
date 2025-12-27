@@ -1,97 +1,69 @@
-// Scripts/Wrappers/Nodejs_Wrapper_Skeleton.js
+const fs = require("fs");
+const path = require("path");
+const child_process = require("child_process");
 
-// Kritik Modülleri İçeri Aktar
-const fs = require('fs');
-const child_process = require('child_process');
-const original_exec = child_process.exec; // Orijinal fonksiyonu kaydet
-const original_readFile = fs.readFile;   // Orijinal fonksiyonu kaydet
+// Zero-trust evaluate (engine aynası)
+function evaluate(request) {
+  // process -> engine zaten DENY ediyor
+  if (request.resource_type === "process") {
+    return { decision: "DENY", reason: "Process execution yasak" };
+  }
 
-// ====================================================================
-// FAZ 1/2: YETKİLENDİRME MOTORU İLETİŞİM PROTOTİPİ
-// ====================================================================
+  const resolved = path.resolve(request.resource);
 
-function checkPermission(actionType, resourceTarget) {
-    /**
-     * Yetkilendirme Motoru'na izin sorgusu gönderen prototip.
-     * Faz 3'te buraya gerçek iletişim kodu gelecek.
-     */
-    if (!resourceTarget.toLowerCase().includes("izinli")) {
-        console.error(`DEBUG: Izin engellendi (PROTOTİP) -> Eylem: ${actionType}, Hedef: ${resourceTarget}`);
-        return false;
-    }
-    
-    console.log(`DEBUG: Izin verildi (PROTOTİP) -> Eylem: ${actionType}, Hedef: ${resourceTarget}`);
-    return true;
+  if (
+    resolved.startsWith("/tmp") ||
+    resolved.startsWith(process.cwd())
+  ) {
+    return { decision: "ALLOW" };
+  }
+
+  return { decision: "DENY", reason: "Path PoLP ihlali" };
 }
 
-// ====================================================================
-// FAZ 3 HEDEFİ 1: CHILD_PROCESS Modülünü Sarmalama (OS Komutları)
-// ====================================================================
+// FS wrappers
+function secureReadFile(file, options) {
+  const res = evaluate({
+    subject: "node_script",
+    resource_type: "file",
+    resource: file,
+    action: "read"
+  });
 
-function secureExec(command, options, callback) {
-    const resourceTarget = String(command);
-    const action = 'OS_EXECUTE';
+  if (res.decision === "DENY") {
+    throw new Error(`ScriptSecure: ${res.reason}`);
+  }
 
-    if (!checkPermission(action, resourceTarget)) {
-        // Yetkilendirme engellendiğinde, Node.js standardına uygun hata döndür.
-        const error = new Error(`ScriptSecure Engellemesi: ${resourceTarget} komutunun çalıştırılması yasaklanmıştır.`);
-        error.code = 'EPERM'; // İzin hatası kodu
-        if (callback) {
-            return callback(error, null, null);
-        }
-        return;
-    }
-
-    return original_exec(command, options, callback);
+  return fs.readFileSync(file, options);
 }
 
-// ====================================================================
-// FAZ 3 HEDEFİ 2: FS (File System) Modülünü Sarmalama
-// ====================================================================
+function secureWriteFile(file, data, options) {
+  const res = evaluate({
+    subject: "node_script",
+    resource_type: "file",
+    resource: file,
+    action: "write"
+  });
 
-function secureReadFile(path, options, callback) {
-    const resourceTarget = String(path);
-    const action = 'FILE_READ';
+  if (res.decision === "DENY") {
+    throw new Error(`ScriptSecure: ${res.reason}`);
+  }
 
-    if (!checkPermission(action, resourceTarget)) {
-        // Yetkilendirme engellendiğinde, Node.js standardına uygun hata döndür.
-        const error = new Error(`ScriptSecure Engellemesi: ${resourceTarget} dosyasını okuma erişimi yasaklanmıştır.`);
-        error.code = 'EACCES'; // Erişim reddi kodu
-        return callback(error, null);
-    }
-
-    return original_readFile(path, options, callback);
+  return fs.writeFileSync(file, data, options);
 }
 
-// TODO: fs.writeFile, fs.unlink, net.connect vb. fonksiyonları buraya eklenecektir.
-
-// ====================================================================
-// ENTEGRASYON NOKTASI
-// ====================================================================
-
-function enableScriptSecureWrappers() {
-    /** Tüm sarmalayıcıları etkinleştirir ve orijinal modül fonksiyonlarının üzerine yazar. */
-    child_process.exec = secureExec;
-    fs.readFile = secureReadFile;
-    // TODO: Diğer sarmalayıcıları burada aktif edin.
-    console.log("ScriptSecure Node.js Wrapperları yüklendi.");
+// Process -> default deny
+function secureExec() {
+  throw new Error("ScriptSecure: OS komutları yasak");
 }
 
-if (require.main === module) {
-    enableScriptSecureWrappers();
-    console.log('\n--- Node.js Prototip Testi Çalışıyor ---');
+function enableNodeSandbox() {
+  fs.readFileSync = secureReadFile;
+  fs.writeFileSync = secureWriteFile;
+  child_process.exec = secureExec;
+  child_process.execSync = secureExec;
 
-    // Engellenmeli
-    child_process.exec("rm -rf /", (error) => {
-        if (error) console.log('ENGELLEME BAŞARILI (rm -rf):', error.message.substring(0, 40) + '...');
-    });
-
-    // İzin verilmeli (prototip kuralına göre)
-    fs.readFile("izinli_log.txt", 'utf8', (error, data) => {
-        if (error && !error.message.includes("izinli")) {
-            console.error('HATA: İzinli işlem engellendi:', error.message);
-        } else if (!error) {
-            console.log('İzinli dosya okuma başarılı.');
-        }
-    });
+  console.log("✅ Node.js sandbox aktif (PoLP)");
 }
+
+module.exports = { enableNodeSandbox };
