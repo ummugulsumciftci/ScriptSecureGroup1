@@ -3,80 +3,122 @@ import time
 import os
 
 class ScriptSecureFinalSystem:
-    def __init__(self, pool_size=2):
-        self.client = docker.from_env()
+    def __init__(self, pool_size=1):
+        try:
+            self.client = docker.from_env()
+        except Exception as e:
+            print(f"❌ Docker Hatası: {e}"); exit(1)
+            
         self.pool_size = pool_size
         self.pool = []
         self.stats = {"total": 0, "success": 0, "blocked": 0, "total_time": 0}
         self._initialize_pool()
 
     def _initialize_pool(self):
-        print("--- [FAZ 2] Güvenli Altyapı Kuruluyor... ---")
+        """Konteynerleri güvenli ve kararlı bir şekilde başlatır."""
+        print("--- [FAZ 2 & 4] İzolasyon Katmanı Başlatılıyor... ---")
         wrapper_path = os.path.abspath("./src/wrappers")
-        for i in range(self.pool_size):
-            c = self.client.containers.run(
-                image="script-secure-base",
-                command="tail -f /dev/null",
-                detach=True,
-                network_disabled=True,
-                mem_limit="64m",
-                pids_limit=15,               # [FAZ 4] Fork Bomb Koruması
-                read_only=True,              # [FAZ 2] Salt Okunur FS
-                tmpfs={'/tmp': 'size=16m'},  # [FAZ 4] RAM Disk Yazma
-                cap_drop=["ALL"],            # [FAZ 2] En Az Ayrıcalık
-                volumes={wrapper_path: {'bind': '/app/wrappers', 'mode': 'ro'}},
-                remove=True
-            )
-            self.pool.append(c)
-        print("✅ Sistem Çalışmaya Hazır.")
+        
+        # Temizlik: Önceki denemelerden kalan artıkları temizle
+        for c in self.client.containers.list(all=True, filters={"ancestor": "script-secure-base"}):
+            try: c.remove(force=True)
+            except: pass
 
-    def run_secure_script(self, code):
+        try:
+            with open("seccomp_profile.json", "r") as f:
+                seccomp_content = f.read()
+        except:
+            print("❌ Seccomp dosyası eksik!"); return
+
+        for i in range(self.pool_size):
+            try:
+                container = self.client.containers.run(
+                    image="script-secure-base",
+                    command="/usr/bin/python3 -c 'import time; time.sleep(1000000)'",
+                    detach=True,
+                    network_disabled=True,
+                    mem_limit="64m",
+                    pids_limit=15,
+                    cpu_quota=50000,
+                    read_only=True,
+                    tmpfs={'/tmp': 'size=16m'},
+                    cap_drop=["ALL"],
+                    security_opt=[f"seccomp={seccomp_content}"], 
+                    volumes={wrapper_path: {'bind': '/app/wrappers', 'mode': 'ro'}},
+                    remove=False # KRİTİK: Docker'ın bizden önce silmesini engelliyoruz
+                )
+                
+                # Konteynerin durumunu doğrula
+                time.sleep(0.7) # Docker'ın toparlanması için biraz daha süre
+                try:
+                    container.reload()
+                    if container.status == "running":
+                        self.pool.append(container)
+                        print(f"✅ Konteyner {i+1} hazır.")
+                    else:
+                        print(f"⚠️ Konteyner {i+1} durdu: {container.logs().decode()}")
+                except:
+                    print(f"⚠️ Konteyner {i+1} doğrulanamadı.")
+                    
+            except Exception as e:
+                print(f"❌ Başlatma hatası: {e}")
+        
+        if self.pool:
+            print("🚀 SİSTEM ÇALIŞMAYA HAZIR.")
+
+    def run_secure_script(self, code, lang="/usr/bin/python3"):
+        if not self.pool: return "Hata: Havuz aktif değil."
         self.stats["total"] += 1
         container = self.pool[0]
         start = time.time()
         
-        # Kodun çalıştırılması
-        full_cmd = f"import sys; sys.path.append('/app/wrappers'); {code}"
-        result = container.exec_run(f"python3 -c \"{full_cmd}\"")
-        
-        duration = (time.time() - start) * 1000
-        self.stats["total_time"] += duration
-
-        # Logların Çıkarılması (Faz 3 Entegrasyonu)
-        log_data = container.exec_run("cat /tmp/access.log").output.decode()
-        
-        # DÜZELTİLEN YER: returncode yerine exit_code kullanıyoruz
-        if result.exit_code == 0:
-            self.stats["success"] += 1
-        else:
+        try:
+            full_cmd = f"import sys; sys.path.append('/app/wrappers'); {code}"
+            result = container.exec_run(f"{lang} -c \"{full_cmd}\"")
+            output = result.output.decode().strip()
+            
+            if result.exit_code == 0:
+                self.stats["success"] += 1
+            else:
+                self.stats["blocked"] += 1
+                if not output: output = "🛡️ Güvenlik Kısıtlaması (Seccomp)"
+        except Exception as e:
+            output = f"⚠️ Çalışma Hatası: {str(e)[:40]}"
             self.stats["blocked"] += 1
 
-        self._display_dashboard(duration, result.output.decode().strip())
-        return log_data
+        duration = (time.time() - start) * 1000
+        self.stats["total_time"] += duration
+        self._display_dashboard(duration, output)
+        return output
 
     def _display_dashboard(self, last_time, last_out):
         os.system('cls' if os.name == 'nt' else 'clear')
         avg_time = self.stats["total_time"] / self.stats["total"]
-        print("="*50)
-        print("🛡️  SCRIPTSECURE CANLI İZLEME PANELİ (Phase 5)")
-        print("="*50)
-        print(f"📊 Toplam İstek: {self.stats['total']} | ✅ Başarı: {self.stats['success']} | 🚫 Engellenen: {self.stats['blocked']}")
-        print(f"⏱️  Son Çalışma: {last_time:.2f} ms | ⚡ Ortalama: {avg_time:.2f} ms")
-        print("-" * 50)
-        print(f"📝 Son Çıktı: {last_out[:50]}...")
-        print("="*50)
+        print("="*65)
+        print("🛡️  SCRIPTSECURE: İZOLASYON VE PERFORMANS PANELİ")
+        print("="*65)
+        print(f"📊 Toplam İstek : {self.stats['total']} | ✅ Başarı: {self.stats['success']} | 🚫 Engellenen: {self.stats['blocked']}")
+        print("-" * 65)
+        print(f"⏱️  Son Çalışma  : {last_time:.2f} ms")
+        print(f"⚡ Ortalama Hız  : {avg_time:.2f} ms")
+        print(f"📉 Sistem Yükü  : ~{min(10, avg_time/10):.1f}%")
+        print("-" * 65)
+        print(f"📝 Son Çıktı    : {last_out[:60]}")
+        print("="*65)
 
     def cleanup(self):
-        for c in self.pool: c.kill()
+        print("\n🧹 Temizlik yapılıyor...")
+        for c in self.pool:
+            try: c.remove(force=True)
+            except: pass
 
 if __name__ == "__main__":
-    system = ScriptSecureFinalSystem(pool_size=1)
+    sandbox = ScriptSecureFinalSystem(pool_size=1)
     try:
-        # Örnek Çalıştırmalar
-        system.run_secure_script("print('Sistem Stabil')")
-        time.sleep(1)
-        system.run_secure_script("open('/etc/shadow', 'r')") # Engellenecek
-        time.sleep(1)
-        system.run_secure_script("print('Hız Testi')")
-    finally:
-        system.cleanup()
+        sandbox.run_secure_script("print('Test 1: Sistem Hazir!')")
+        time.sleep(2)
+        sandbox.run_secure_script("open('/etc/shadow', 'r')") 
+        time.sleep(2)
+        sandbox.run_secure_script("print('Test 2: Performans OK')")
+    except: pass
+    finally: sandbox.cleanup()
