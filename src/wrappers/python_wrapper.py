@@ -25,10 +25,12 @@ def log_access(action, target, decision):
     timestamp = datetime.now().isoformat()
     line = f"{timestamp} | {action} | {target} | {decision}\n"
 
-    # ⚠️ MUTLAKA original open
-    with _original_open("access.log", "a", encoding="utf-8") as f:
-        f.write(line)
-
+    # Log dosyasını yazılabilir olan /tmp klasörüne yönlendiriyoruz
+    try:
+        with _original_open("/tmp/access.log", "a", encoding="utf-8") as f:
+            f.write(line)
+    except:
+        pass # Log yazılamazsa bile sistemin çökmesini engelle
 
 # =====================================================
 # OPEN() WRAPPER
