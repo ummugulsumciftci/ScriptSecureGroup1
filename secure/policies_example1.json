@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "default_effect": "deny",
+  "rules": [
+    {
+      "id": "allow_read_app_data",
+      "effect": "allow",
+      "resource_type": "file",
+      "actions": ["read"],
+      "pattern": "/app/data/*"
+    },
+    {
+      "id": "allow_write_tmp",
+      "effect": "allow",
+      "resource_type": "file",
+      "actions": ["write", "create"],
+      "pattern": "/tmp/*"
+    },
+    {
+      "id": "deny_sensitive_files",
+      "effect": "deny",
+      "resource_type": "file",
+      "actions": ["read", "write", "create"],
+      "pattern": "/etc/*"
+    },
+    {
+      "id": "allow_https_example",
+      "effect": "allow",
+      "resource_type": "network",
+      "actions": ["connect"],
+      "pattern": "https://example.com/*"
+    },
+    {
+      "id": "deny_process_exec",
+      "effect": "deny",
+      "resource_type": "process",
+      "actions": ["execute"],
+      "pattern": "*"
+    }
+  ]
+}
