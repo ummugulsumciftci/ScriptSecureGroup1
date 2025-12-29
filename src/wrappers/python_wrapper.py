@@ -1,9 +1,15 @@
-import builtins
-import os
+import sys
 from pathlib import Path
 
-from secure.engine import AuthorizationEngine
-from secure.models import AuthorizationRequest
+# 🔑 src dizinini Python path'ine ekle (kritik)
+SRC_PATH = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(SRC_PATH))
+
+import builtins
+import os
+
+from engine import AuthorizationEngine
+from models import AuthorizationRequest
 
 # Orijinal fonksiyonları sakla
 _original_open = builtins.open

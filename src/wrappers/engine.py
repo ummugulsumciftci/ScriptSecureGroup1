@@ -1,9 +1,7 @@
-from .models import AuthorizationRequest, AuthorizationDecision, Decision
-from .policy_store import PolicyStore
-
+from models import AuthorizationRequest, AuthorizationDecision, Decision
+from policy_store import PolicyStore
 
 class AuthorizationEngine:
-
     def __init__(self, policy_store: PolicyStore):
         self.policy_store = policy_store
 

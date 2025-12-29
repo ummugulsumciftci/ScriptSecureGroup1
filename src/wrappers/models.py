@@ -1,4 +1,3 @@
-# models.py
 from dataclasses import dataclass
 from enum import Enum
 
@@ -9,9 +8,9 @@ class Decision(str, Enum):
 @dataclass
 class AuthorizationRequest:
     script_id: str
-    language: str        # "python", "javascript"
+    language: str
     resource_type: str   # "file", "network", "process"
-    resource: str        # "/app/data.txt", "https://api.example.com"
+    resource: str
     action: str          # "read", "write", "execute", "connect"
     container_id: str | None = None
 
@@ -19,3 +18,4 @@ class AuthorizationRequest:
 class AuthorizationDecision:
     decision: Decision
     reason: str
+    rule_id: str | None = None  # EKLENDİ: Hata önlendi
